@@ -31,11 +31,11 @@ use core::task::Poll;
 /// ```
 /// # use stackfuture::*;
 /// trait PseudoAsyncTrait {
-///     fn do_something(&self) -> StackFuture<'static, (), { 512 }>;
+///     fn do_something(&self) -> StackFuture<'_, (), { 512 }>;
 /// }
 ///
 /// impl PseudoAsyncTrait for i32 {
-///     fn do_something(&self) -> StackFuture<'static, (), { 512 }> {
+///     fn do_something(&self) -> StackFuture<'_, (), { 512 }> {
 ///         StackFuture::from(async {
 ///             // function body goes here
 ///         })
