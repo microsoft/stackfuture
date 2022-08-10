@@ -10,7 +10,7 @@ license = "MIT"
 authors = ["Microsoft"]
 repository = "https://github.com/microsoft/stackfuture"
 keywords = ["async", "no_std", "futures"]
-categories = ["asynchronous"]
+categories = ["asynchronous", "no-std", "rust-patterns"]
 
 [dependencies]
 
