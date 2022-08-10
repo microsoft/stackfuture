@@ -9,6 +9,8 @@ edition = "2021"
 license = "MIT"
 authors = ["Microsoft"]
 repository = "https://github.com/microsoft/stackfuture"
+keywords = ["async", "no_std", "futures"]
+categories = ["asynchronous"]
 
 [dependencies]
 
