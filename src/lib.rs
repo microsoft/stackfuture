@@ -241,12 +241,17 @@ impl<'a, T, const STACK_SIZE: usize> Drop for StackFuture<'a, T, { STACK_SIZE }>
 mod tests {
     use crate::StackFuture;
     use core::task::Poll;
+    use futures::channel::mpsc;
     use futures::executor::block_on;
     use futures::pin_mut;
     use futures::Future;
+    use futures::SinkExt;
+    use futures::Stream;
+    use futures::StreamExt;
     use std::sync::Arc;
     use std::task::Context;
     use std::task::Wake;
+    use std::thread;
 
     #[test]
     fn create_and_run() {
@@ -339,5 +344,32 @@ mod tests {
     /// `alignment` must be a power of two.
     fn is_aligned<T>(ptr: *mut T, alignment: usize) -> bool {
         (ptr as usize) & (alignment - 1) == 0
+    }
+
+    /// Regression test for #9
+    #[test]
+    fn stress_drop_sender() {
+        const ITER: usize = if cfg!(miri) { 100 } else { 10000 };
+
+        fn list() -> impl Stream<Item = i32> {
+            let (tx, rx) = mpsc::channel(1);
+            thread::spawn(move || {
+                block_on(send_one_two_three(tx));
+            });
+            rx
+        }
+
+        for _ in 0..ITER {
+            let v: Vec<_> = block_on(list().collect());
+            assert_eq!(v, vec![1, 2, 3]);
+        }
+    }
+
+    fn send_one_two_three(mut tx: mpsc::Sender<i32>) -> StackFuture<'static, (), 512> {
+        StackFuture::from(async move {
+            for i in 1..=3 {
+                tx.send(i).await.unwrap();
+            }
+        })
     }
 }
