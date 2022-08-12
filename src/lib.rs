@@ -190,7 +190,10 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     /// enough to hold F and any required padding.
     fn as_mut_ptr<F>(&mut self) -> *mut F {
         assert!(Self::has_space_for::<F>());
-        self.data.as_mut_ptr().cast()
+        // SAFETY: Self is laid out so that the space for the future comes at offset 0.
+        // This is checked by an assertion in Self::from. Thus it's safe to cast a pointer
+        // to Self into a pointer to the wrapped future.
+        unsafe { mem::transmute(self) }
     }
 
     /// Returns a pinned mutable reference to a type F stored in self.data
@@ -226,8 +229,17 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
 impl<'a, T, const STACK_SIZE: usize> Future for StackFuture<'a, T, { STACK_SIZE }> {
     type Output = T;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        (self.as_mut().poll_fn)(self, cx)
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        // SAFETY: This is doing pin projection. We unpin self so we can
+        // access self.poll_fn, and then re-pin self to pass it into poll_in.
+        // The part of the struct that needs to be pinned is data, since it
+        // contains a potentially self-referential future object, but since we
+        // do not touch that while self is unpinned and we do not move self
+        // while unpinned we are okay.
+        unsafe {
+            let this = self.get_unchecked_mut();
+            (this.poll_fn)(Pin::new_unchecked(this), cx)
+        }
     }
 }
 
@@ -346,10 +358,11 @@ mod tests {
         (ptr as usize) & (alignment - 1) == 0
     }
 
-    /// Regression test for #9
     #[test]
     fn stress_drop_sender() {
-        const ITER: usize = if cfg!(miri) { 100 } else { 10000 };
+        // Regression test for #9
+
+        const ITER: usize = if cfg!(miri) { 10 } else { 10000 };
 
         fn list() -> impl Stream<Item = i32> {
             let (tx, rx) = mpsc::channel(1);
