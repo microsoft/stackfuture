@@ -60,7 +60,7 @@ use core::task::Poll;
 /// Because `StackFuture` does not know the size of the future it wraps, the maximum
 /// size of the future must be specified in the `STACK_SIZE` parameter. In the example
 /// here, we've used a stack size of 512, which is probably much larger than necessary
-/// but would accomodate many futures besides the simple one we've shown here.
+/// but would accommodate many futures besides the simple one we've shown here.
 ///
 /// `StackFuture` ensures when wrapping a future that enough space is available, and
 /// it also respects any alignment requirements for the wrapped future. Note that the
