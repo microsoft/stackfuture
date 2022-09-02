@@ -132,3 +132,13 @@ fn send_one_two_three(mut tx: mpsc::Sender<i32>) -> StackFuture<'static, (), 512
         }
     })
 }
+
+#[test]
+fn try_from() {
+    let big_future = StackFuture::<_, 1000>::from(async {});
+
+    match StackFuture::<_, 10>::try_from(big_future) {
+        Ok(_) => panic!("try_from should not have succeeded"),
+        Err(big_future) => assert!(StackFuture::<_, 1500>::try_from(big_future).is_ok()),
+    };
+}
