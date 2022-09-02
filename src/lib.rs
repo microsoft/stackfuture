@@ -125,10 +125,32 @@ pub struct StackFuture<'a, T, const STACK_SIZE: usize> {
 }
 
 impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
-    /// Creates a StackFuture from an existing future
+    /// Creates a `StackFuture` from an existing future
     ///
-    /// See the documentation on `StackFuture` for examples of how to use this.
+    /// See the documentation on [`StackFuture`] for examples of how to use this.
+    ///
+    /// Panics if the requested `StackFuture` is not large enough to hold `future` or we cannot
+    /// satisfy the alignment requirements for `F`.
     pub fn from<F>(future: F) -> Self
+    where
+        F: Future<Output = T> + Send + 'a, // the bounds here should match those in the _phantom field
+    {
+        Self::try_from(future).unwrap_or_else(|f| {
+            panic!(
+                "cannot create StackFuture, required size is {}, available space is {}",
+                mem::size_of_val(&f),
+                STACK_SIZE
+            )
+        })
+    }
+
+    /// Attempts to create a `StackFuture` from an existing future
+    ///
+    /// If the `StackFuture` is not large enough to hold `future`, this function returns an
+    /// `Err` with the argument `future` returned to you.
+    ///
+    /// If we cannot satisfy the alignment requirements for `F`, this function will panic.
+    pub fn try_from<F>(future: F) -> Result<Self, F>
     where
         F: Future<Output = T> + Send + 'a, // the bounds here should match those in the _phantom field
     {
@@ -161,13 +183,9 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
             // we can be sure anything that `future` closes over will also outlive `result`.
             unsafe { result.as_mut_ptr::<F>().write(future) };
 
-            result
+            Ok(result)
         } else {
-            panic!(
-                "cannot create StackFuture, required size is {}, available space is {}",
-                mem::size_of::<F>(),
-                STACK_SIZE
-            );
+            Err(future)
         }
     }
 
