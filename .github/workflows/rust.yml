@@ -11,6 +11,9 @@ env:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        features: ["", "--features alloc"]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -21,12 +24,15 @@ jobs:
     - name: Clippy
       run: cargo clippy --all-features --all-targets -- -D warnings
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --verbose ${{ matrix.features }}
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --verbose ${{ matrix.features }}
 
   miri:
     name: "Miri"
+    strategy:
+      matrix:
+        features: ["", "--features alloc"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -36,4 +42,4 @@ jobs:
           rustup override set nightly
           cargo miri setup
       - name: Test with Miri
-        run: cargo miri test
+        run: cargo miri test ${{ matrix.features }}
