@@ -129,6 +129,8 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     ///
     /// See the documentation on [`StackFuture`] for examples of how to use this.
     ///
+    /// # Panics
+    ///
     /// Panics if the requested `StackFuture` is not large enough to hold `future` or we cannot
     /// satisfy the alignment requirements for `F`.
     pub fn from<F>(future: F) -> Self
@@ -148,6 +150,8 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     ///
     /// If the `StackFuture` is not large enough to hold `future`, this function returns an
     /// `Err` with the argument `future` returned to you.
+    ///
+    /// Panics
     ///
     /// If we cannot satisfy the alignment requirements for `F`, this function will panic.
     pub fn try_from<F>(future: F) -> Result<Self, F>
