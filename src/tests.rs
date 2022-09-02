@@ -98,6 +98,42 @@ fn test_alignment() {
     assert!(is_aligned(f.as_mut_ptr::<BigAlignment>(), 8));
 }
 
+#[test]
+#[should_panic]
+fn test_alignment_failure() {
+    // A test to make sure we store the wrapped future with the correct alignment
+
+    #[repr(align(256))]
+    struct BigAlignment(u32);
+
+    impl Future for BigAlignment {
+        type Output = Never;
+
+        fn poll(self: std::pin::Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+            Poll::Pending
+        }
+    }
+    StackFuture::<'_, _, 1016>::from(BigAlignment(42));
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn test_boxed_alignment() {
+    // A test to make sure we store the wrapped future with the correct alignment
+
+    #[repr(align(256))]
+    struct BigAlignment(u32);
+
+    impl Future for BigAlignment {
+        type Output = Never;
+
+        fn poll(self: std::pin::Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+            Poll::Pending
+        }
+    }
+    StackFuture::<'_, _, 1016>::from_or_box(BigAlignment(42));
+}
+
 /// Returns whether `ptr` is aligned with the given alignment
 ///
 /// `alignment` must be a power of two.
@@ -141,4 +177,11 @@ fn try_from() {
         Ok(_) => panic!("try_from should not have succeeded"),
         Err(big_future) => assert!(StackFuture::<_, 1500>::try_from(big_future).is_ok()),
     };
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn from_or_box() {
+    let big_future = StackFuture::<_, 1000>::from(async {});
+    StackFuture::<_, 32>::from_or_box(big_future);
 }

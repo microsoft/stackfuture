@@ -20,6 +20,12 @@ use core::ptr;
 use core::task::Context;
 use core::task::Poll;
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
+#[cfg(feature = "alloc")]
+use alloc::boxed::Box;
+
 /// A wrapper that stores a future in space allocated by the container
 ///
 /// Often this space comes from the calling function's stack, but it could just
@@ -138,11 +144,27 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
         F: Future<Output = T> + Send + 'a, // the bounds here should match those in the _phantom field
     {
         Self::try_from(future).unwrap_or_else(|f| {
-            panic!(
-                "cannot create StackFuture, required size is {}, available space is {}",
-                mem::size_of_val(&f),
-                STACK_SIZE
-            )
+            match (Self::has_alignment_for_val(&f), Self::has_space_for_val(&f)) {
+                (false, false) => panic!(
+                    "cannot create StackFuture, required size is {}, available space is {}; required alignment is {} but maximum alignment is {}",
+                    mem::size_of_val(&f),
+                    STACK_SIZE,
+                    mem::align_of::<F>(),
+                    mem::align_of::<Self>()
+                ),
+                (false, true) => panic!(
+                    "cannot create StackFuture, required alignment is {} but maximum alignment is {}",
+                    mem::align_of::<F>(),
+                    mem::align_of::<Self>()
+                ),
+                (true, false) => panic!(
+                    "cannot create StackFuture, required size is {}, available space is {}",
+                    mem::size_of_val(&f),
+                    STACK_SIZE
+                ),
+                // If we have space and alignment, then `try_from` would have succeeded
+                (true, true) => unreachable!(),
+            }
         })
     }
 
@@ -158,15 +180,7 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     where
         F: Future<Output = T> + Send + 'a, // the bounds here should match those in the _phantom field
     {
-        if mem::align_of::<F>() > mem::align_of::<Self>() {
-            panic!(
-                "cannot create StackFuture, required alignment is {} but maximum alignment is {}",
-                mem::align_of::<F>(),
-                mem::align_of::<Self>()
-            )
-        }
-
-        if Self::has_space_for_val(&future) {
+        if Self::has_space_for_val(&future) && Self::has_alignment_for_val(&future) {
             let mut result = StackFuture {
                 data: [MaybeUninit::uninit(); STACK_SIZE],
                 poll_fn: Self::poll_inner::<F>,
@@ -191,6 +205,24 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
         } else {
             Err(future)
         }
+    }
+
+    /// Creates a StackFuture from the given future, boxing if necessary
+    ///
+    /// This version will succeed even if the future is larger than `STACK_SIZE`. If the future
+    /// is too large, `from_or_box` will allocate a `Box` on the heap and store the resulting
+    /// boxed future in the `StackFuture`.
+    ///
+    /// The same thing also happens if the wrapped future's alignment is larger than StackFuture's
+    /// alignment.
+    ///
+    /// This function requires the "alloc" crate feature.
+    #[cfg(feature = "alloc")]
+    pub fn from_or_box<F>(future: F) -> Self
+    where
+        F: Future<Output = T> + Send + 'a, // the bounds here should match those in the _phantom field
+    {
+        Self::try_from(future).unwrap_or_else(|future| Self::from(Box::pin(future)))
     }
 
     /// A wrapper around the inner future's poll function, which we store in the poll_fn field
@@ -238,13 +270,25 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     }
 
     /// Determines whether this `StackFuture` can hold a value of type `F`
-    fn has_space_for<F>() -> bool {
+    pub fn has_space_for<F>() -> bool {
         Self::required_space::<F>() <= STACK_SIZE
     }
 
     /// Determines whether this `StackFuture` can hold the referenced value
-    fn has_space_for_val<F>(_: &F) -> bool {
+    pub fn has_space_for_val<F>(_: &F) -> bool {
         Self::has_space_for::<F>()
+    }
+
+    /// Determines whether this `StackFuture`'s alignment is compatible with the
+    /// type `F`.
+    pub fn has_alignment_for<F>() -> bool {
+        mem::align_of::<F>() <= mem::align_of::<Self>()
+    }
+
+    /// Determines whether this `StackFuture`'s alignment is compatible with the
+    /// referenced value.
+    pub fn has_alignment_for_val<F>(_: &F) -> bool {
+        Self::has_alignment_for::<F>()
     }
 }
 
