@@ -18,4 +18,5 @@ categories = ["asynchronous", "no-std", "rust-patterns"]
 futures = { version = "0.3", features = ["executor"] }
 
 [features]
+default = ["alloc"]
 alloc = []
