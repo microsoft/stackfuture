@@ -1,6 +1,7 @@
 # StackFuture
 
-![crates.io](https://img.shields.io/crates/v/stackfuture.svg)
+[![crates.io](https://img.shields.io/crates/v/stackfuture.svg)](https://crates.io/crates/stackfuture)
+[![docs.rs](https://img.shields.io/docsrs/stackfuture)](https://docs.rs/stackfuture/)
 
 This crate defines a `StackFuture` wrapper around futures that stores the wrapped future in space provided by the caller.
 This can be used to emulate dynamic async traits without requiring heap allocation.
