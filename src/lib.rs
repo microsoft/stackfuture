@@ -143,6 +143,15 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     where
         F: Future<Output = T> + Send + 'a, // the bounds here should match those in the _phantom field
     {
+        // Ideally we would provide this as:
+        //
+        //     impl<'a, F, const STACK_SIZE: usize> From<F> for  StackFuture<'a, F::Output, { STACK_SIZE }>
+        //     where
+        //         F: Future + Send + 'a
+        //
+        // However, libcore provides a blanket `impl<T> From<T> for T`, and since `StackFuture: Future`,
+        // both impls end up being applicable to do `From<StackFuture> for StackFuture`.
+
         Self::try_from(future).unwrap_or_else(|f| {
             match (Self::has_alignment_for_val(&f), Self::has_space_for_val(&f)) {
                 (false, false) => panic!(
