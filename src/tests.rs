@@ -81,6 +81,21 @@ fn destructor_runs() {
 }
 
 #[test]
+fn test_size_failure() {
+    async fn fill_buf(buf: &mut [u8]) {
+        buf[0] = 42;
+    }
+
+    let f = async {
+        let mut buf = [0u8; 256];
+        fill_buf(&mut buf).await;
+        buf[0]
+    };
+
+    assert!(StackFuture::<_, 4>::try_from(f).is_err());
+}
+
+#[test]
 fn test_alignment() {
     // A test to make sure we store the wrapped future with the correct alignment
 
@@ -99,7 +114,6 @@ fn test_alignment() {
 }
 
 #[test]
-#[should_panic]
 fn test_alignment_failure() {
     // A test to make sure we store the wrapped future with the correct alignment
 
@@ -113,7 +127,7 @@ fn test_alignment_failure() {
             Poll::Pending
         }
     }
-    StackFuture::<'_, _, 1016>::from(BigAlignment(42));
+    assert!(StackFuture::<'_, _, 1016>::try_from(BigAlignment(42)).is_err());
 }
 
 #[cfg(feature = "alloc")]

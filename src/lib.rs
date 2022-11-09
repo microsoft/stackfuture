@@ -10,6 +10,7 @@
 // std is needed to run tests, but otherwise we don't need it.
 #![cfg_attr(not(test), no_std)]
 #![warn(missing_docs)]
+#![allow(clippy::let_unit_value)]
 
 use core::future::Future;
 use core::marker::PhantomData;
@@ -72,45 +73,6 @@ use alloc::boxed::Box;
 /// it also respects any alignment requirements for the wrapped future. Note that the
 /// wrapped future's alignment must be less than or equal to that of the overall
 /// `StackFuture` struct.
-///
-/// The following example would panic because the future is too large:
-/// ```should_panic
-/// # use stackfuture::*;
-/// fn large_stack_future() -> StackFuture<'static, u8, { 4 }> {
-///     StackFuture::from(async {
-///         let mut buf = [0u8; 256];
-///         fill_buf(&mut buf).await;
-///         buf[0]
-///     })
-/// }
-///
-/// async fn fill_buf(buf: &mut [u8]) {
-///     buf[0] = 42;
-/// }
-///
-/// let future = large_stack_future();
-/// ```
-///
-/// The following example would panic because the alignment requirements can't be met:
-/// ```should_panic
-/// # use stackfuture::*;
-/// #[repr(align(4096))]
-/// struct LargeAlignment(i32);
-///
-/// fn large_alignment_future() -> StackFuture<'static, i32, { 8192 }> {
-///     StackFuture::from(async {
-///         let mut buf = LargeAlignment(0);
-///         fill_buf(&mut buf).await;
-///         buf.0
-///     })
-/// }
-///
-/// async fn fill_buf(buf: &mut LargeAlignment) {
-///     buf.0 = 42;
-/// }
-///
-/// let future = large_alignment_future();
-/// ```
 #[repr(C)] // Ensures the data first does not have any padding before it in the struct
 pub struct StackFuture<'a, T, const STACK_SIZE: usize> {
     /// An array of bytes that is used to store the wrapped future.
@@ -135,10 +97,37 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     ///
     /// See the documentation on [`StackFuture`] for examples of how to use this.
     ///
-    /// # Panics
+    /// The size and alignment requirements are statically checked, so it is a compiler error
+    /// to use this with a future that does not fit within the [`StackFuture`]'s size and
+    /// alignment requirements.
     ///
-    /// Panics if the requested `StackFuture` is not large enough to hold `future` or we cannot
-    /// satisfy the alignment requirements for `F`.
+    /// The following example illustrates a compile error for a future that is too large.
+    /// ```compile_fail
+    /// # use stackfuture::StackFuture;
+    /// // Fails because the future contains a large array and is therefore too big to fit in
+    /// // a 16-byte `StackFuture`.
+    /// let f = StackFuture::<_, { 16 }>::from(async {
+    ///     let x = [0u8; 4096];
+    ///     async {}.await;
+    ///     println!("{}", x.len());
+    /// });
+    /// ```
+    ///
+    /// The example below illustrates a compiler error for a future whose alignment is too large.
+    /// ```compile_fail
+    /// # use stackfuture::StackFuture;
+    ///
+    /// #[repr(align(256))]
+    /// struct BigAlignment(usize);
+    ///
+    /// // Fails because the future contains a large array and is therefore too big to fit in
+    /// // a 16-byte `StackFuture`.
+    /// let f = StackFuture::<_, { 16 }>::from(async {
+    ///     let x = BigAlignment(42);
+    ///     async {}.await;
+    ///     println!("{}", x.len());
+    /// });
+    /// ```
     pub fn from<F>(future: F) -> Self
     where
         F: Future<Output = T> + Send + 'a, // the bounds here should match those in the _phantom field
@@ -151,6 +140,8 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
         //
         // However, libcore provides a blanket `impl<T> From<T> for T`, and since `StackFuture: Future`,
         // both impls end up being applicable to do `From<StackFuture> for StackFuture`.
+
+        let _ = AssertFits::<F, STACK_SIZE>::ASSERT;
 
         Self::try_from(future).unwrap_or_else(|f| {
             match (Self::has_alignment_for_val(&f), Self::has_space_for_val(&f)) {
@@ -274,29 +265,29 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     }
 
     /// Computes how much space is required to store a value of type `F`
-    fn required_space<F>() -> usize {
+    const fn required_space<F>() -> usize {
         mem::size_of::<F>()
     }
 
     /// Determines whether this `StackFuture` can hold a value of type `F`
-    pub fn has_space_for<F>() -> bool {
+    pub const fn has_space_for<F>() -> bool {
         Self::required_space::<F>() <= STACK_SIZE
     }
 
     /// Determines whether this `StackFuture` can hold the referenced value
-    pub fn has_space_for_val<F>(_: &F) -> bool {
+    pub const fn has_space_for_val<F>(_: &F) -> bool {
         Self::has_space_for::<F>()
     }
 
     /// Determines whether this `StackFuture`'s alignment is compatible with the
     /// type `F`.
-    pub fn has_alignment_for<F>() -> bool {
+    pub const fn has_alignment_for<F>() -> bool {
         mem::align_of::<F>() <= mem::align_of::<Self>()
     }
 
     /// Determines whether this `StackFuture`'s alignment is compatible with the
     /// referenced value.
-    pub fn has_alignment_for_val<F>(_: &F) -> bool {
+    pub const fn has_alignment_for_val<F>(_: &F) -> bool {
         Self::has_alignment_for::<F>()
     }
 }
@@ -322,6 +313,20 @@ impl<'a, T, const STACK_SIZE: usize> Drop for StackFuture<'a, T, { STACK_SIZE }>
     fn drop(&mut self) {
         (self.drop_fn)(self);
     }
+}
+
+struct AssertFits<F, const STACK_SIZE: usize>(PhantomData<F>);
+
+impl<F, const STACK_SIZE: usize> AssertFits<F, STACK_SIZE> {
+    const ASSERT: () = {
+        if !StackFuture::<F, STACK_SIZE>::has_space_for::<F>() {
+            panic!("F is too large");
+        }
+
+        if !StackFuture::<F, STACK_SIZE>::has_alignment_for::<F>() {
+            panic!("F has incompatible alignment");
+        }
+    };
 }
 
 #[cfg(test)]
