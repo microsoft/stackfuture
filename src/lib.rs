@@ -117,6 +117,7 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     /// ```compile_fail
     /// # use stackfuture::StackFuture;
     ///
+    /// #[derive(Debug)]
     /// #[repr(align(256))]
     /// struct BigAlignment(usize);
     ///
@@ -125,7 +126,7 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     /// let f = StackFuture::<_, { 16 }>::from(async {
     ///     let x = BigAlignment(42);
     ///     async {}.await;
-    ///     println!("{}", x.len());
+    ///     println!("{x:?}");
     /// });
     /// ```
     pub fn from<F>(future: F) -> Self
@@ -141,8 +142,14 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
         // However, libcore provides a blanket `impl<T> From<T> for T`, and since `StackFuture: Future`,
         // both impls end up being applicable to do `From<StackFuture> for StackFuture`.
 
+        // Statically assert that `F` meets all the size and alignment requirements
         let _ = AssertFits::<F, STACK_SIZE>::ASSERT;
 
+        // Since we have the static assert above, we know this will not fail. This means we could
+        // use `unwrap_unchecked` here. The extra `unsafe` code probably isn't worth it since very
+        // likely the compiler will be able to make that optimization for us, this comment is here
+        // as a reminder that we can change it if for some reason this ends up being a performance
+        // issue in the future.
         Self::try_from(future).unwrap_or_else(|f| {
             match (Self::has_alignment_for_val(&f), Self::has_space_for_val(&f)) {
                 (false, false) => panic!(
