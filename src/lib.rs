@@ -11,7 +11,10 @@
 #![cfg_attr(not(test), no_std)]
 #![warn(missing_docs)]
 
+use core::fmt::Debug;
+use core::fmt::Display;
 use core::future::Future;
+use core::future::IntoFuture;
 use core::marker::PhantomData;
 use core::mem;
 use core::mem::MaybeUninit;
@@ -147,34 +150,7 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
         #[allow(clippy::let_unit_value)]
         let _ = AssertFits::<F, STACK_SIZE>::ASSERT;
 
-        // Since we have the static assert above, we know this will not fail. This means we could
-        // use `unwrap_unchecked` here. The extra `unsafe` code probably isn't worth it since very
-        // likely the compiler will be able to make that optimization for us, this comment is here
-        // as a reminder that we can change it if for some reason this ends up being a performance
-        // issue in the future.
-        Self::try_from(future).unwrap_or_else(|f| {
-            match (Self::has_alignment_for_val(&f), Self::has_space_for_val(&f)) {
-                (false, false) => panic!(
-                    "cannot create StackFuture, required size is {}, available space is {}; required alignment is {} but maximum alignment is {}",
-                    mem::size_of_val(&f),
-                    STACK_SIZE,
-                    mem::align_of::<F>(),
-                    mem::align_of::<Self>()
-                ),
-                (false, true) => panic!(
-                    "cannot create StackFuture, required alignment is {} but maximum alignment is {}",
-                    mem::align_of::<F>(),
-                    mem::align_of::<Self>()
-                ),
-                (true, false) => panic!(
-                    "cannot create StackFuture, required size is {}, available space is {}",
-                    mem::size_of_val(&f),
-                    STACK_SIZE
-                ),
-                // If we have space and alignment, then `try_from` would have succeeded
-                (true, true) => unreachable!(),
-            }
-        })
+        Self::try_from(future).unwrap()
     }
 
     /// Attempts to create a `StackFuture` from an existing future
@@ -185,7 +161,7 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     /// Panics
     ///
     /// If we cannot satisfy the alignment requirements for `F`, this function will panic.
-    pub fn try_from<F>(future: F) -> Result<Self, F>
+    pub fn try_from<F>(future: F) -> Result<Self, IntoStackFutureError<F>>
     where
         F: Future<Output = T> + Send + 'a, // the bounds here should match those in the _phantom field
     {
@@ -212,7 +188,7 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
 
             Ok(result)
         } else {
-            Err(future)
+            Err(IntoStackFutureError::new::<Self>(future))
         }
     }
 
@@ -231,7 +207,7 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     where
         F: Future<Output = T> + Send + 'a, // the bounds here should match those in the _phantom field
     {
-        Self::try_from(future).unwrap_or_else(|future| Self::from(Box::pin(future)))
+        Self::try_from(future).unwrap_or_else(|future| Self::from(Box::pin(future.into_future())))
     }
 
     /// A wrapper around the inner future's poll function, which we store in the poll_fn field
@@ -336,6 +312,107 @@ impl<F, const STACK_SIZE: usize> AssertFits<F, STACK_SIZE> {
             panic!("F has incompatible alignment");
         }
     };
+}
+
+/// Captures information about why a future could not be converted into a [`StackFuture`]
+///
+/// It also contains the original future so that callers can still run the future in error
+/// recovery paths, such as by boxing the future instead of wrapping it in [`StackFuture`].
+pub struct IntoStackFutureError<F> {
+    /// The size of the StackFuture we tried to convert the future into
+    maximum_size: usize,
+    /// The StackFuture's alignment
+    maximum_alignment: usize,
+    /// The future that was attempted to be wrapped
+    future: F,
+}
+
+impl<F> IntoStackFutureError<F> {
+    fn new<Target>(future: F) -> Self {
+        Self {
+            maximum_size: mem::size_of::<Target>(),
+            maximum_alignment: mem::align_of::<Target>(),
+            future,
+        }
+    }
+
+    /// Returns true if the target [`StackFuture`] was too small to hold the given future.
+    pub fn insufficient_space(&self) -> bool {
+        self.maximum_size < mem::size_of_val(&self.future)
+    }
+
+    /// Returns true if the target [`StackFuture`]'s alignment was too small to accommodate the given future.
+    pub fn alignment_too_small(&self) -> bool {
+        self.maximum_alignment < mem::align_of_val(&self.future)
+    }
+
+    /// Returns the alignment of the wrapped future.
+    pub fn required_alignment(&self) -> usize {
+        mem::align_of_val(&self.future)
+    }
+
+    /// Returns the size of the wrapped future.
+    pub fn required_space(&self) -> usize {
+        mem::size_of_val(&self.future)
+    }
+
+    /// Returns the alignment of the target [`StackFuture`], which is also the maximum alignment
+    /// that can be wrapped.
+    pub const fn available_alignment(&self) -> usize {
+        self.maximum_alignment
+    }
+
+    /// Returns the amount of space that was available in the target [`StackFuture`].
+    pub const fn available_space(&self) -> usize {
+        self.maximum_size
+    }
+}
+
+impl<F: Future> IntoFuture for IntoStackFutureError<F> {
+    type Output = F::Output;
+
+    type IntoFuture = F;
+
+    /// Returns the underlying future that caused this error
+    ///
+    /// Can be used to try again, either by directly awaiting the future, wrapping it in a `Box`,
+    /// or some other method.
+    fn into_future(self) -> Self::IntoFuture {
+        self.future
+    }
+}
+
+impl<F> Display for IntoStackFutureError<F> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match (self.alignment_too_small(), self.insufficient_space()) {
+            (true, true) => write!(f,
+                "cannot create StackFuture, required size is {}, available space is {}; required alignment is {} but maximum alignment is {}",
+                self.required_space(),
+                self.available_space(),
+                self.required_alignment(),
+                self.available_alignment()
+            ),
+            (true, false) => write!(f,
+                "cannot create StackFuture, required alignment is {} but maximum alignment is {}",
+                self.required_alignment(),
+                self.available_alignment()
+            ),
+            (false, true) => write!(f,
+                "cannot create StackFuture, required size is {}, available space is {}",
+                self.required_space(),
+                self.available_space()
+            ),
+            // If we have space and alignment, then `try_from` would have succeeded
+            (false, false) => unreachable!(),
+        }
+    }
+}
+
+impl<F> Debug for IntoStackFutureError<F> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // Forward to the Display implementation
+        write!(f, "{self}")
+    }
 }
 
 #[cfg(test)]
