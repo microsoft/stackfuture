@@ -7,6 +7,7 @@ use futures::Future;
 use futures::SinkExt;
 use futures::Stream;
 use futures::StreamExt;
+use std::future::IntoFuture;
 use std::sync::Arc;
 use std::task::Context;
 use std::task::Wake;
@@ -92,7 +93,10 @@ fn test_size_failure() {
         buf[0]
     };
 
-    assert!(StackFuture::<_, 4>::try_from(f).is_err());
+    match StackFuture::<_, 4>::try_from(f) {
+        Ok(_) => panic!("conversion to StackFuture should not have succeeded"),
+        Err(e) => assert!(e.insufficient_space()),
+    }
 }
 
 #[test]
@@ -127,7 +131,10 @@ fn test_alignment_failure() {
             Poll::Pending
         }
     }
-    assert!(StackFuture::<'_, _, 1016>::try_from(BigAlignment(42)).is_err());
+    match StackFuture::<'_, _, 1016>::try_from(BigAlignment(42)) {
+        Ok(_) => panic!("conversion to StackFuture should not have succeeded"),
+        Err(e) => assert!(e.alignment_too_small()),
+    }
 }
 
 #[cfg(feature = "alloc")]
@@ -189,7 +196,9 @@ fn try_from() {
 
     match StackFuture::<_, 10>::try_from(big_future) {
         Ok(_) => panic!("try_from should not have succeeded"),
-        Err(big_future) => assert!(StackFuture::<_, 1500>::try_from(big_future).is_ok()),
+        Err(big_future) => {
+            assert!(StackFuture::<_, 1500>::try_from(big_future.into_future()).is_ok())
+        }
     };
 }
 
