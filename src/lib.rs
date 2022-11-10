@@ -110,6 +110,7 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     ///     async {}.await;
     ///     println!("{}", x.len());
     /// });
+    /// # #[cfg(miri)] break rust; // FIXME: miri doesn't detect this breakage for some reason...
     /// ```
     ///
     /// The example below illustrates a compiler error for a future whose alignment is too large.
@@ -127,6 +128,7 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     ///     async {}.await;
     ///     println!("{x:?}");
     /// });
+    /// # #[cfg(miri)] break rust; // FIXME: miri doesn't detect this breakage for some reason...
     /// ```
     pub fn from<F>(future: F) -> Self
     where
@@ -142,6 +144,7 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
         // both impls end up being applicable to do `From<StackFuture> for StackFuture`.
 
         // Statically assert that `F` meets all the size and alignment requirements
+        #[allow(clippy::let_unit_value)]
         let _ = AssertFits::<F, STACK_SIZE>::ASSERT;
 
         // Since we have the static assert above, we know this will not fail. This means we could
