@@ -10,7 +10,6 @@
 // std is needed to run tests, but otherwise we don't need it.
 #![cfg_attr(not(test), no_std)]
 #![warn(missing_docs)]
-#![allow(clippy::let_unit_value)]
 
 use core::future::Future;
 use core::marker::PhantomData;
