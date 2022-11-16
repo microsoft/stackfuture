@@ -207,7 +207,7 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     where
         F: Future<Output = T> + Send + 'a, // the bounds here should match those in the _phantom field
     {
-        Self::try_from(future).unwrap_or_else(|future| Self::from(Box::pin(future.into_future())))
+        Self::try_from(future).unwrap_or_else(|err| Self::from(Box::pin(err.into_future())))
     }
 
     /// A wrapper around the inner future's poll function, which we store in the poll_fn field
