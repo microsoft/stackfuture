@@ -7,7 +7,6 @@ use futures::Future;
 use futures::SinkExt;
 use futures::Stream;
 use futures::StreamExt;
-use std::future::IntoFuture;
 use std::sync::Arc;
 use std::task::Context;
 use std::task::Wake;
@@ -197,7 +196,7 @@ fn try_from() {
     match StackFuture::<_, 10>::try_from(big_future) {
         Ok(_) => panic!("try_from should not have succeeded"),
         Err(big_future) => {
-            assert!(StackFuture::<_, 1500>::try_from(big_future.into_future()).is_ok())
+            assert!(StackFuture::<_, 1500>::try_from(big_future.into_inner()).is_ok())
         }
     };
 }
