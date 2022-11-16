@@ -14,7 +14,6 @@
 use core::fmt::Debug;
 use core::fmt::Display;
 use core::future::Future;
-use core::future::IntoFuture;
 use core::marker::PhantomData;
 use core::mem;
 use core::mem::MaybeUninit;
@@ -207,7 +206,7 @@ impl<'a, T, const STACK_SIZE: usize> StackFuture<'a, T, { STACK_SIZE }> {
     where
         F: Future<Output = T> + Send + 'a, // the bounds here should match those in the _phantom field
     {
-        Self::try_from(future).unwrap_or_else(|err| Self::from(Box::pin(err.into_future())))
+        Self::try_from(future).unwrap_or_else(|err| Self::from(Box::pin(err.into_inner())))
     }
 
     /// A wrapper around the inner future's poll function, which we store in the poll_fn field
@@ -366,18 +365,12 @@ impl<F> IntoStackFutureError<F> {
     pub const fn available_space(&self) -> usize {
         self.maximum_size
     }
-}
-
-impl<F: Future> IntoFuture for IntoStackFutureError<F> {
-    type Output = F::Output;
-
-    type IntoFuture = F;
 
     /// Returns the underlying future that caused this error
     ///
     /// Can be used to try again, either by directly awaiting the future, wrapping it in a `Box`,
     /// or some other method.
-    fn into_future(self) -> Self::IntoFuture {
+    fn into_inner(self) -> F {
         self.future
     }
 }
