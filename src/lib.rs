@@ -403,8 +403,11 @@ impl<F> Display for IntoStackFutureError<F> {
 
 impl<F> Debug for IntoStackFutureError<F> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        // Forward to the Display implementation
-        write!(f, "{self}")
+        f.debug_struct("IntoStackFutureError")
+            .field("maximum_size", &self.maximum_size)
+            .field("maximum_alignment", &self.maximum_alignment)
+            .field("future", &core::any::type_name::<F>())
+            .finish()
     }
 }
 
