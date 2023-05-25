@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 use crate::StackFuture;
 use core::task::Poll;
 use futures::channel::mpsc;
