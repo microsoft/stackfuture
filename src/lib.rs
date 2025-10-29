@@ -11,6 +11,7 @@
 #![cfg_attr(not(test), no_std)]
 #![warn(missing_docs)]
 
+use const_panic::concat_panic;
 use core::fmt::Debug;
 use core::fmt::Display;
 use core::future::Future;
@@ -304,11 +305,21 @@ struct AssertFits<F, const STACK_SIZE: usize>(PhantomData<F>);
 impl<F, const STACK_SIZE: usize> AssertFits<F, STACK_SIZE> {
     const ASSERT: () = {
         if !StackFuture::<F, STACK_SIZE>::has_space_for::<F>() {
-            panic!("F is too large");
+            concat_panic!(
+                "F is too large: ",
+                StackFuture::<F, STACK_SIZE>::required_space::<F>(),
+                " > ",
+                STACK_SIZE
+            );
         }
 
         if !StackFuture::<F, STACK_SIZE>::has_alignment_for::<F>() {
-            panic!("F has incompatible alignment");
+            concat_panic!(
+                "F has incompatible alignment: ",
+                align_of::<F>(),
+                " > ",
+                align_of::<StackFuture::<F, STACK_SIZE>>()
+            );
         }
     };
 }
