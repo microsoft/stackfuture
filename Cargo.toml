@@ -13,6 +13,7 @@ keywords = ["async", "no_std", "futures"]
 categories = ["asynchronous", "no-std", "rust-patterns"]
 
 [dependencies]
+const_panic = "0.2"
 
 [dev-dependencies]
 futures = { version = "0.3", features = ["executor"] }
