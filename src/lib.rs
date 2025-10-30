@@ -378,19 +378,22 @@ impl<F> IntoStackFutureError<F> {
 impl<F> Display for IntoStackFutureError<F> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match (self.alignment_too_small(), self.insufficient_space()) {
-            (true, true) => write!(f,
+            (true, true) => write!(
+                f,
                 "cannot create StackFuture, required size is {}, available space is {}; required alignment is {} but maximum alignment is {}",
                 self.required_space(),
                 self.available_space(),
                 self.required_alignment(),
                 self.available_alignment()
             ),
-            (true, false) => write!(f,
+            (true, false) => write!(
+                f,
                 "cannot create StackFuture, required alignment is {} but maximum alignment is {}",
                 self.required_alignment(),
                 self.available_alignment()
             ),
-            (false, true) => write!(f,
+            (false, true) => write!(
+                f,
                 "cannot create StackFuture, required size is {}, available space is {}",
                 self.required_space(),
                 self.available_space()
