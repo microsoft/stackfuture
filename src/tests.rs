@@ -144,6 +144,7 @@ fn test_boxed_alignment() {
     // A test to make sure we store the wrapped future with the correct alignment
 
     #[repr(align(256))]
+    #[allow(dead_code)]
     struct BigAlignment(u32);
 
     impl Future for BigAlignment {
