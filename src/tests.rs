@@ -106,6 +106,7 @@ fn test_alignment() {
     // A test to make sure we store the wrapped future with the correct alignment
 
     #[repr(align(8))]
+    #[allow(dead_code)]
     struct BigAlignment(u32);
 
     impl Future for BigAlignment {
@@ -124,6 +125,7 @@ fn test_alignment_failure() {
     // A test to make sure we store the wrapped future with the correct alignment
 
     #[repr(align(256))]
+    #[allow(dead_code)]
     struct BigAlignment(u32);
 
     impl Future for BigAlignment {
