@@ -1,12 +1,12 @@
 use crate::StackFuture;
 use core::task::Poll;
-use futures::channel::mpsc;
-use futures::executor::block_on;
-use futures::pin_mut;
 use futures::Future;
 use futures::SinkExt;
 use futures::Stream;
 use futures::StreamExt;
+use futures::channel::mpsc;
+use futures::executor::block_on;
+use futures::pin_mut;
 use std::sync::Arc;
 use std::task::Context;
 use std::task::Wake;
