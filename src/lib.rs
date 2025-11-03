@@ -306,7 +306,7 @@ impl<F, const STACK_SIZE: usize> AssertFits<F, STACK_SIZE> {
     const ASSERT: () = {
         if !StackFuture::<F, STACK_SIZE>::has_space_for::<F>() {
             concat_panic!(
-                "F is too large: ",
+                "Future is too large: ",
                 StackFuture::<F, STACK_SIZE>::required_space::<F>(),
                 " > ",
                 STACK_SIZE
@@ -315,7 +315,7 @@ impl<F, const STACK_SIZE: usize> AssertFits<F, STACK_SIZE> {
 
         if !StackFuture::<F, STACK_SIZE>::has_alignment_for::<F>() {
             concat_panic!(
-                "F has incompatible alignment: ",
+                "Future has incompatible alignment: ",
                 align_of::<F>(),
                 " > ",
                 align_of::<StackFuture::<F, STACK_SIZE>>()
